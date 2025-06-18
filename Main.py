@@ -11,7 +11,12 @@ def load_image(image_path):
         raise ValueError("No se pudo cargar la imagen. Verifica la ruta.")
     return image, cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-
+def preprocess_image(image):
+    """Preprocesamiento: reduce ruido y detecta bordes"""
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    edged = cv2.Canny(blurred, 50, 150)
+    return edged, gray
 
 
 if __name__ == "__main__":
@@ -22,6 +27,8 @@ if __name__ == "__main__":
     try:
         # Paso 1: Cargar imagen
         image, image_rgb = load_image(input_path)
+        # Paso 2: Preprocesamiento
+        edged, gray = preprocess_image(image)
 
         # Visualización
         plt.figure(figsize=(15, 10))
