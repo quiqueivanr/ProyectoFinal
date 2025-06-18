@@ -67,6 +67,32 @@ def correct_perspective(image, doc_contour):
     warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
     return warped
 
+def enhance_document(warped_image):
+    """Mejora el contraste y binariza el documento"""
+    gray = cv2.cvtColor(warped_image, cv2.COLOR_BGR2GRAY)
+    thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                 cv2.THRESH_BINARY, 11, 2)
+    thresh = cv2.bitwise_not(thresh)
+    kernel = np.ones((2, 2), np.uint8)
+    thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+    return thresh
+
+
+def color_enhancement(warped_image):
+    """Mejora el color y nitidez (opcional para documentos a color)"""
+    lab = cv2.cvtColor(warped_image, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    l = clahe.apply(l)
+    lab = cv2.merge((l, a, b))
+    enhanced = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+    return enhanced
+
+
+def save_results(enhanced_image, output_path):
+    """Guarda la imagen procesada"""
+    cv2.imwrite(output_path, enhanced_image)
+
 
 
 if __name__ == "__main__":
@@ -86,6 +112,14 @@ if __name__ == "__main__":
         if doc_contour is not None:
             # Paso 4: Corrección de perspectiva
             warped = correct_perspective(image, doc_contour)
+            # Paso 5: Mejora (blanco y negro)
+            enhanced_bw = enhance_document(warped)
+
+            # Paso 6 (Opcional): Mejora de color
+            enhanced_color = color_enhancement(warped)
+
+            # Guardar resultados
+            save_results(enhanced_bw, output_path)
 
             # Visualización
             plt.figure(figsize=(15, 10))
