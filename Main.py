@@ -71,7 +71,7 @@ def correct_perspective(image, doc_contour):
 
 if __name__ == "__main__":
     # Configuración
-    input_path = "foto1.jpg"
+    input_path = "foto2.jpg"
     output_path = "documento_escaneado.jpg"
 
     try:
