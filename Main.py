@@ -191,43 +191,43 @@ def recortar_bordes(imagen, porcentaje=2):
 
 if __name__ == "__main__":
     # Configuración
-    input_path = "foto2.jpg"
+    input_path = "prueba.jpg"
     output_BN = "documento_BN.jpg"
     output_color = "documento_color.jpg"
 
     try:
         # Paso 1: Cargar imagen
-        print("🔍 Cargando imagen...")
+        print("Cargando imagen...")
         imagen, image_rgb = cargar_imagen(input_path)
 
         # Mostrar tamaño original
-        print(f"📐 Tamaño original: {imagen.shape[1]}x{imagen.shape[0]}")
+        print(f"Tamaño original: {imagen.shape[1]}x{imagen.shape[0]}")
 
         # Paso 2: Preprocesamiento mejorado
-        print("🛠️ Procesando imagen...")
+        print("Procesando imagen...")
         edged, gray = Preprocesar_Imagen(imagen)
 
         # Paso 3: Detección de documento con parámetros adaptativos
-        print("🔎 Buscando documento...")
+        print(" Buscando documento...")
         doc_contour = encontrar_contorno(edged)
 
         if doc_contour is not None:
             # Paso 4: Corrección de perspectiva mejorada
-            print("✂️ Recortando y corrigiendo perspectiva...")
+            print("Recortando y corrigiendo perspectiva...")
             warped = corregir_perspectiva(imagen, doc_contour)
 
             # Recortar bordes residuales
             final = recortar_bordes(warped, porcentaje=1)  # Ajusta el porcentaje según necesites
 
             # Mostrar información del resultado
-            print(f"📏 Tamaño documento: {warped.shape[1]}x{warped.shape[0]}")
+            print(f"Tamaño documento: {warped.shape[1]}x{warped.shape[0]}")
 
             # Paso 5: Mejora del documento (versión color)
-            print("🎨 Mejorando documento (color)...")
+            print("Mejorando documento (color)...")
             enhanced_color = mejorar_documento(final, 'color')
 
             # Paso 6: Mejora del documento (versión blanco/negro)
-            print("⚫⚪ Creando versión blanco/negro...")
+            print("Creando versión blanco/negro...")
             enhanced_bw = mejorar_documento(warped, 'bw')
 
             # Guardar resultados
