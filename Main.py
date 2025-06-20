@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from skimage import exposure
 
-
 # Cargar la imagen
 def cargar_imagen(image_path):
     """Carga la imagen y la convierte a RGB para visualización"""
@@ -193,8 +192,8 @@ def recortar_bordes(imagen, porcentaje=2):
 if __name__ == "__main__":
     # Configuración
     input_path = "foto2.jpg"
-    output_path_bw = "documento_bw.jpg"
-    output_path_color = "documento_color.jpg"
+    output_BN = "documento_BN.jpg"
+    output_color = "documento_color.jpg"
 
     try:
         # Paso 1: Cargar imagen
@@ -233,8 +232,8 @@ if __name__ == "__main__":
 
             # Guardar resultados
             print("💾 Guardando resultados...")
-            guardar_resultados(enhanced_color, output_path_color)
-            guardar_resultados(enhanced_bw, output_path_bw)
+            guardar_resultados(enhanced_color, output_color)
+            guardar_resultados(enhanced_bw, output_BN)
 
             # Visualización
             plt.figure(figsize=(18, 12))
@@ -262,7 +261,7 @@ if __name__ == "__main__":
             plt.tight_layout()
             plt.show()
 
-            print("✅ Proceso completado con éxito!")
+            print("✅ Documento escaneado con éxito!")
         else:
             try:
                 warped = corregir_perspectiva(imagen, doc_contour)
