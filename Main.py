@@ -14,33 +14,26 @@ def cargar_imagen(image_path):
 
 
 def Preprocesar_Imagen(imagen):
-    """Preprocesamiento mejorado con control de iluminación"""
+    """Preprocesamiento mejorado para bordes más precisos"""
     # Convertir a escala de grises
     gray = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
 
-    # Corrección gamma para mejorar contraste
-    gamma = 1.5 if np.mean(gray) < 100 else 0.8
-    gray = np.power(gray / 255.0, gamma) * 255.0
-    gray = gray.astype(np.uint8)
+    # Mejorar contraste con CLAHE
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    gray = clahe.apply(gray)
 
-    # Reducción de ruido adaptativo
-    blur_size = 5 if imagen.shape[1] > 1000 else 3
-    blurred = cv2.GaussianBlur(gray, (blur_size, blur_size), 0)
+    # Reducción de ruido más agresiva
+    blurred = cv2.bilateralFilter(gray, 9, 75, 75)
 
-    # Ecualización CLAHE para mejorar contraste local
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-    equalized = clahe.apply(blurred)
+    # Detección de bordes con Canny adaptativo
+    v = np.median(blurred)
+    lower = int(max(0, 0.7 * v))
+    upper = int(min(255, 1.3 * v))
+    edged = cv2.Canny(blurred, lower, upper)
 
-    # Detección de bordes con parámetros adaptativos
-    v = np.median(equalized)
-    sigma = 0.33
-    lower = int(max(0, (1.0 - sigma) * v))
-    upper = int(min(255, (1.0 + sigma) * v))
-    edged = cv2.Canny(equalized, lower, upper)
-
-    # Operación morfológica para conectar bordes
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-    edged = cv2.morphologyEx(edged, cv2.MORPH_CLOSE, kernel, iterations=2)
+    # Operación morfológica para cerrar pequeños huecos
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    edged = cv2.morphologyEx(edged, cv2.MORPH_CLOSE, kernel)
 
     return edged, gray
 
@@ -54,50 +47,57 @@ def encontrar_contorno(edged_image, min_area_ratio=0.02, epsilon_ratio=0.02):
         print("❌ Error: No se detectaron contornos")
         return None
 
-    # Calcular área de la imagen
-    height, width = edged_image.shape
-    image_area = height * width
-    min_area = image_area * min_area_ratio
-    max_area = image_area * 0.95  # Más flexible que 0.9
+    # Ordenar contornos por área (mayor a menor)
+    contours = sorted(contours, key=cv2.contourArea, reverse=True)
 
-    # Filtrar contornos por área
-    valid_contours = [c for c in contours if min_area <= cv2.contourArea(c) <= max_area]
-
-    if not valid_contours:
-        print(f"⚠️ No hay contornos en el rango de área {min_area:.0f}-{max_area:.0f} px")
-        # Usar el contorno más grande como fallback
-        valid_contours = [max(contours, key=cv2.contourArea)]
-
-    # Ordenar por área descendente
-    valid_contours = sorted(valid_contours, key=cv2.contourArea, reverse=True)[:3]
-
-    # Evaluar los mejores contornos
-    for i, contour in enumerate(valid_contours):
+    for contour in contours:
         peri = cv2.arcLength(contour, True)
-        approx = cv2.approxPolyDP(contour, epsilon_ratio * peri, True)
+        approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
 
-        # Criterios más flexibles para formas cuadriláteras
+        # Si no tiene 4 lados, forzar aproximación a 4 puntos
+        if len(approx) != 4:
+            # Aproximación más agresiva hasta obtener 4 puntos
+            for epsilon in [0.03, 0.04, 0.05]:
+                approx = cv2.approxPolyDP(contour, epsilon * peri, True)
+                if len(approx) == 4:
+                    break
+
+        # Si ahora tiene 4 lados, verificar calidad
         if len(approx) == 4:
-            x, y, w, h = cv2.boundingRect(approx)
-            aspect_ratio = w / float(h)
-            convex = cv2.isContourConvex(approx)
-            solidity = cv2.contourArea(contour) / float(w * h)
+            if cv2.isContourConvex(approx):
+                x, y, w, h = cv2.boundingRect(approx)
+                aspect_ratio = w / float(h)
+                solidity = cv2.contourArea(contour) / float(w * h)
 
-            # Rangos más amplios para aceptar documentos
-            if 0.3 < aspect_ratio < 3.0 and solidity > 0.5:
-                print(f"✅ Documento detectado (Contorno {i + 1})")
-                print(f"- Lados: {len(approx)}")
-                print(f"- Área: {cv2.contourArea(contour):.0f} px")
-                print(f"- Aspect Ratio: {aspect_ratio:.2f}")
-                print(f"- Solidez: {solidity:.2f}")
-                return approx
+                if 0.5 < aspect_ratio < 2.0 and solidity > 0.7:
+                    print(f"✅ Contorno válido encontrado con {len(approx)} puntos")
+                    return approx
 
-    print("⚠️ Usando el mejor contorno disponible (puede no ser perfecto)")
-    return cv2.convexHull(valid_contours[0])
+    # Si no se encontró contorno válido, usar el mayor con 4 puntos forzados
+    print("⚠️ Usando mejor contorno disponible (puede no ser perfecto)")
+    largest_contour = contours[0]
+    peri = cv2.arcLength(largest_contour, True)
+    approx = cv2.approxPolyDP(largest_contour, 0.05 * peri, True)  # Aproximación más agresiva
+
+    # Si aún no tiene 4 puntos, crear un rectángulo desde el bounding rect
+    if len(approx) != 4:
+        x, y, w, h = cv2.boundingRect(largest_contour)
+        approx = np.array([[[x, y]], [[x + w, y]], [[x + w, y + h]], [[x, y + h]]])
+
+    return approx
 
 
 def corregir_perspectiva(imagen, doc_contour):
-    """Corrige perspectiva manteniendo el máximo contenido posible"""
+    """Corrección de perspectiva con verificación de puntos"""
+    # Asegurarse que el contorno tiene exactamente 4 puntos
+    if doc_contour is None:
+        raise ValueError("No se proporcionó un contorno válido")
+
+    pts = doc_contour.reshape(-1, 2)
+    if pts.shape[0] != 4:
+        # Si no tiene 4 puntos, crear un rectángulo desde el bounding rect
+        x, y, w, h = cv2.boundingRect(doc_contour)
+        pts = np.array([[x, y], [x + w, y], [x + w, y + h], [x, y + h]], dtype="float32")
 
     def order_points(pts):
         rect = np.zeros((4, 2), dtype="float32")
@@ -122,19 +122,17 @@ def corregir_perspectiva(imagen, doc_contour):
     height_right = np.sqrt(((tr[0] - br[0]) ** 2 + (tr[1] - br[1]) ** 2))
     max_height = max(int(height_left), int(height_right))
 
-    # Puntos de destino con margen adicional
-    margin = int(max(max_width, max_height) * 0.05)  # 5% de margen
+    # Puntos de destino SIN margen
     dst = np.array([
-        [margin, margin],
-        [max_width - 1 + margin, margin],
-        [max_width - 1 + margin, max_height - 1 + margin],
-        [margin, max_height - 1 + margin]], dtype="float32")
+        [0, 0],
+        [max_width - 1, 0],
+        [max_width - 1, max_height - 1],
+        [0, max_height - 1]], dtype="float32")
 
+    # Transformación de perspectiva
     M = cv2.getPerspectiveTransform(rect, dst)
-    warped = cv2.warpPerspective(imagen, M,
-                                 (max_width + 2 * margin, max_height + 2 * margin),
-                                 flags=cv2.INTER_CUBIC,
-                                 borderMode=cv2.BORDER_REPLICATE)
+    warped = cv2.warpPerspective(imagen, M, (max_width, max_height))
+
     return warped
 
 
@@ -185,6 +183,13 @@ def guardar_resultados(enhanced_image, output_path):
     cv2.imwrite(output_path, enhanced_image, [cv2.IMWRITE_JPEG_QUALITY, 95])
 
 
+def recortar_bordes(imagen, porcentaje=2):
+    """Recorta un pequeño porcentaje de los bordes para eliminar artefactos"""
+    h, w = imagen.shape[:2]
+    crop_h = int(h * porcentaje / 100)
+    crop_w = int(w * porcentaje / 100)
+    return imagen[crop_h:h-crop_h, crop_w:w-crop_w]
+
 if __name__ == "__main__":
     # Configuración
     input_path = "foto2.jpg"
@@ -212,12 +217,15 @@ if __name__ == "__main__":
             print("✂️ Recortando y corrigiendo perspectiva...")
             warped = corregir_perspectiva(imagen, doc_contour)
 
+            # Recortar bordes residuales
+            final = recortar_bordes(warped, porcentaje=1)  # Ajusta el porcentaje según necesites
+
             # Mostrar información del resultado
             print(f"📏 Tamaño documento: {warped.shape[1]}x{warped.shape[0]}")
 
             # Paso 5: Mejora del documento (versión color)
             print("🎨 Mejorando documento (color)...")
-            enhanced_color = mejorar_documento(warped, 'color')
+            enhanced_color = mejorar_documento(final, 'color')
 
             # Paso 6: Mejora del documento (versión blanco/negro)
             print("⚫⚪ Creando versión blanco/negro...")
@@ -256,7 +264,11 @@ if __name__ == "__main__":
 
             print("✅ Proceso completado con éxito!")
         else:
-            print("❌ No se pudo detectar un documento válido. Intente con otra imagen.")
+            try:
+                warped = corregir_perspectiva(imagen, doc_contour)
+            except Exception as e:
+                print(f"⚠️ Error al corregir perspectiva: {str(e)}. Usando imagen original.")
+                warped = imagen.copy()
 
     except Exception as e:
         print(f"❌ Error: {str(e)}")
